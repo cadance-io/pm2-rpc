@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # The full test suite requires a running PM2 daemon and cannot execute
+  # on stock GitHub-hosted runners, so CI only validates that the sdist
+  # and wheel still build cleanly.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      - run: uv build
