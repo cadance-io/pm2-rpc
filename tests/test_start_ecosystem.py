@@ -112,9 +112,7 @@ def test_start_ecosystem_env_per_app_reaches_process(
     assert pm2.env(name_a)["APP_MODE"] == "suite"
 
 
-def test_ecosystem_passes_lifecycle_keys(
-    two_app_names: tuple[str, str], tmp_path: Path
-) -> None:
+def test_ecosystem_passes_lifecycle_keys(two_app_names: tuple[str, str], tmp_path: Path) -> None:
     name_a, name_b = two_app_names
     payload = _two_app_payload(name_a, name_b)
     payload["apps"][0]["kill_timeout"] = 7777

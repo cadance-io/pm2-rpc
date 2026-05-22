@@ -225,7 +225,5 @@ def test_build_app_config_emits_watch_bool(tmp_path: Path) -> None:
 def test_build_app_config_emits_watch_paths(tmp_path: Path) -> None:
     script = tmp_path / "x.py"
     script.write_text("")
-    cfg = ac.build_app_config(
-        script=str(script), cwd=tmp_path, watch=["src", "config.yaml"]
-    )
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, watch=["src", "config.yaml"])
     assert cfg["watch"] == ["src", "config.yaml"]
