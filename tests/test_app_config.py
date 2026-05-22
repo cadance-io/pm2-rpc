@@ -187,3 +187,45 @@ def test_appconfig_has_optional_lifecycle_keys() -> None:
 
 def test_pm2env_exposes_kill_signal() -> None:
     assert "kill_signal" in get_type_hints(PM2Env, include_extras=False)
+
+
+# build_app_config — kill_timeout / kill_signal / watch -----------------------
+
+
+def test_build_app_config_omits_lifecycle_keys_by_default(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path)
+    assert "kill_timeout" not in cfg
+    assert "kill_signal" not in cfg
+    assert "watch" not in cfg
+
+
+def test_build_app_config_emits_kill_timeout_when_set(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, kill_timeout=10000)
+    assert cfg["kill_timeout"] == 10000
+
+
+def test_build_app_config_emits_kill_signal_when_set(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, kill_signal="SIGINT")
+    assert cfg["kill_signal"] == "SIGINT"
+
+
+def test_build_app_config_emits_watch_bool(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, watch=True)
+    assert cfg["watch"] is True
+
+
+def test_build_app_config_emits_watch_paths(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(
+        script=str(script), cwd=tmp_path, watch=["src", "config.yaml"]
+    )
+    assert cfg["watch"] == ["src", "config.yaml"]

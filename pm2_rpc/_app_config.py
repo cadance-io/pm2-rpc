@@ -117,6 +117,9 @@ def build_app_config(
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
     merge_logs: bool = False,
+    kill_timeout: int | None = None,
+    kill_signal: str | None = None,
+    watch: bool | list[str] | None = None,
 ) -> AppConfig:
     """Build the env dict to pass to `axon.rpc_call("prepare", env_dict)`.
 
@@ -146,7 +149,7 @@ def build_app_config(
     if error_file is not None:
         paths["pm_err_log_path"] = str(error_file)
 
-    return {
+    cfg: AppConfig = {
         "name": safe_name,
         "script": str(script_path),
         "pm_exec_path": str(script_path),
@@ -165,3 +168,10 @@ def build_app_config(
         "pm_log_path": paths["pm_log_path"],
         "pm_pid_path": paths["pm_pid_path"],
     }
+    if kill_timeout is not None:
+        cfg["kill_timeout"] = kill_timeout
+    if kill_signal is not None:
+        cfg["kill_signal"] = kill_signal
+    if watch is not None:
+        cfg["watch"] = watch
+    return cfg
