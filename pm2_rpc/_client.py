@@ -125,12 +125,22 @@ def start(
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
     merge_logs: bool = False,
+    kill_timeout: int | None = None,
+    kill_signal: str | None = None,
+    watch: bool | builtins.list[str] | None = None,
 ) -> PM2Process:
     """Launch a new process via the daemon's `prepare` RPC.
 
     Builds the app config in Python (see `_app_config.build_app_config`) and
     polls until the process appears in `getMonitorData` before returning —
     `prepare` returns before the daemon finishes registering.
+
+    `kill_timeout` (ms) raises PM2's 1600ms graceful-shutdown window; bump it
+    for apps whose SIGTERM propagation takes longer (e.g., a uvicorn dev
+    server whose multiprocessing-spawn worker needs several seconds).
+    `kill_signal` swaps the stop signal (e.g., "SIGINT" for jupyter/ipython
+    which trap SIGINT). `watch=True` or a list of paths delegates file-watch
+    + restart to PM2 instead of embedding it in the app.
     """
     cfg = _app_config.build_app_config(
         script=script,
@@ -143,6 +153,9 @@ def start(
         out_file=out_file,
         error_file=error_file,
         merge_logs=merge_logs,
+        kill_timeout=kill_timeout,
+        kill_signal=kill_signal,
+        watch=watch,
     )
     axon.rpc_call("prepare", cfg)
     return _wait_until_registered(cfg["name"])
