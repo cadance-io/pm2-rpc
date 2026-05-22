@@ -38,6 +38,11 @@ print(proc["pm2_env"]["restart_time"])
 # Start a fresh process — no ecosystem file required
 pm2.start("scripts/worker.py", name="worker", env={"DEBUG": "1"})
 
+# Lifecycle knobs for apps with awkward shutdown / file-watch needs:
+pm2.start("dev_server.py", name="api", kill_timeout=10000)       # 10s window
+pm2.start("notebook.py", name="nb", kill_signal="SIGINT")         # jupyter-style
+pm2.start("worker.py", name="w", watch=["src", "config.yaml"])   # PM2-managed reload
+
 # Or from an ecosystem.config.{json,yaml}
 pm2.start_ecosystem("ecosystem.config.json", only="worker")
 
@@ -72,7 +77,9 @@ pm2.delete("worker")  # removes it entirely
 | `error_logs(target, lines=15) -> str` | Last N lines of stderr |
 
 `pm2_rpc.start()` kwargs use PM2's vocabulary: `name`, `interpreter`, `cwd`,
-`args`, `env`, `autorestart`, `out_file`, `error_file`, `merge_logs`.
+`args`, `env`, `autorestart`, `out_file`, `error_file`, `merge_logs`,
+`kill_timeout`, `kill_signal`, `watch`. `pm2_rpc.restart()` additionally
+accepts `kill_timeout` to bump the graceful-shutdown window for the next stop.
 
 Low-level access if you need it:
 
@@ -88,7 +95,7 @@ rpc_call("getMonitorData", {})   # raw axon-rpc round-trip
   `module.exports`). Convert to `.json`/`.yaml`, use `pm2_rpc.start()` with
   app fields, or shell out to `pm2 start ecosystem.config.js --only NAME`.
 - NVM-pinned interpreters (`exec_interpreter: "node@18.0.0"`).
-- `filter_env`, source-map auto-detection, watch mode.
+- `filter_env`, source-map auto-detection.
 - `$PATH` lookup of script names — pass an absolute path (use
   `shutil.which()` yourself if you really want a PATH binary).
 
