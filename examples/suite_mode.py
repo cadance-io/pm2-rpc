@@ -1,18 +1,19 @@
-"""Demo: walk through the APP_MODE flip workflow.
+"""Example: ensure a long-running PM2 app is up with APP_MODE=suite.
 
 Mirrors the CLI flow:
     pm2 describe <name>                    # existence probe
-    pm2 start ecosystem.config.js --only X # bootstrap if missing
+    pm2 start ecosystem.config.json --only X  # bootstrap if missing
     pm2 env <id>                           # check current mode
-    pm2 restart <name> --update-env        # flip the mode
+    pm2 restart <name>                     # flip the mode (env merges server-side)
     pm2 logs <name> --lines N --nostream   # peek on failure
-    pm2 stop <name>                        # teardown
+    pm2 stop <name>                        # teardown (not shown here)
 """
 
 from __future__ import annotations
 
-import axon
-import pm2
+import os
+
+import pm2_rpc as pm2
 
 
 def _fmt_bytes(n: float) -> str:
@@ -30,12 +31,13 @@ def show_list() -> None:
     print(header)
     print("-" * len(header))
     for p in procs:
-        monit = p.raw.get("monit", {})
+        env = p["pm2_env"]
+        monit = p.get("monit", {})
         print(
-            f"{p.pm_id:>3}  "
-            f"{p.name:<30}  "
-            f"{(p.pid or 0):>7}  "
-            f"{p.status:<10}  "
+            f"{env['pm_id']:>3}  "
+            f"{env['name']:<30}  "
+            f"{(p.get('pid') or 0):>7}  "
+            f"{env['status']:<10}  "
             f"{_fmt_bytes(monit.get('memory') or 0):>8}  "
             f"{(monit.get('cpu') or 0):>3}%"
         )
@@ -48,16 +50,15 @@ def ensure_suite_mode(name: str, ecosystem: str) -> None:
         pm2.start_ecosystem(ecosystem, only=name)
         return
 
-    current = pm2.env(name).get("APP_MODE")
-    if current == "suite":
+    if pm2.env(name).get("APP_MODE") == "suite":
         print(f"[skip] {name} already in suite mode")
         return
 
-    print(f"[flip] {name} mode {current!r} → 'suite'")
+    print(f"[flip] {name} → APP_MODE=suite")
     try:
-        pm2.restart(name, env={"APP_MODE": "suite"})
-    except axon.PM2Error:
-        print(f"[error] restart failed — last logs:\n{pm2.logs(name, lines=20)}")
+        pm2.restart(name, env={**os.environ, "APP_MODE": "suite"})
+    except pm2.PM2Error:
+        print(f"[error] restart failed — last stderr:\n{pm2.error_logs(name, lines=20)}")
         raise
 
 

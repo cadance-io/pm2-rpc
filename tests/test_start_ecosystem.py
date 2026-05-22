@@ -5,13 +5,12 @@ from __future__ import annotations
 
 import json
 import sys
-import textwrap
 from pathlib import Path
 
 import pytest
 import yaml
 
-import pm2
+import pm2_rpc as pm2
 from tests.conftest import SLEEPER, _safe_delete, unique_name
 
 
@@ -64,7 +63,7 @@ def test_start_ecosystem_only_starts_just_one(
 
     started = pm2.start_ecosystem(config, only=name_a, cwd=tmp_path)
 
-    assert [p.name for p in started] == [name_a]
+    assert [p["pm2_env"]["name"] for p in started] == [name_a]
     assert pm2.exists(name_a) is True
     assert pm2.exists(name_b) is False, "--only must not touch sibling apps"
 
@@ -77,7 +76,7 @@ def test_start_ecosystem_starts_all_apps_when_only_omitted(
 
     started = pm2.start_ecosystem(config, cwd=tmp_path)
 
-    names = {p.name for p in started}
+    names = {p["pm2_env"]["name"] for p in started}
     assert names == {name_a, name_b}
 
 
@@ -87,7 +86,7 @@ def test_start_ecosystem_respects_cwd(
     name_a, _ = two_app_names
     config = _write_json(tmp_path, _two_app_payload(name_a, _ + "ignored"))
     pm2.start_ecosystem(config, only=name_a, cwd=tmp_path)
-    assert pm2.describe(name_a).pm2_env["pm_cwd"] == str(tmp_path)
+    assert pm2.describe(name_a)["pm2_env"]["pm_cwd"] == str(tmp_path)
 
 
 def test_start_ecosystem_js_raises_unsupported(tmp_path: Path) -> None:

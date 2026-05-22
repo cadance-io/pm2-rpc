@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -48,18 +47,18 @@ def _sanitize_name(name: str) -> str:
 
 
 def _resolve_script(script: str | Path, cwd: Path) -> Path:
-    """Resolve `script` to an absolute path. Falls back to $PATH lookup.
+    """Resolve `script` to an absolute path relative to `cwd`.
 
-    Mirrors lib/Common.js lines 148–163.
+    Intentionally does NOT fall back to $PATH (unlike lib/Common.js lines
+    148–163) — silently turning `pm2.start("python3")` into a thrashing
+    interpreter process is a worse UX than a clean FileNotFoundError. Pass
+    `shutil.which(...)`'s result if you actually want a PATH binary.
     """
     p = Path(script)
     candidate = p if p.is_absolute() else cwd / p
-    if candidate.is_file():
-        return candidate.resolve()
-    on_path = shutil.which(str(script))
-    if on_path:
-        return Path(on_path)
-    raise FileNotFoundError(f"script not found: {script}")
+    if not candidate.is_file():
+        raise FileNotFoundError(f"script not found: {script}")
+    return candidate.resolve()
 
 
 def _resolve_interpreter(ext: str, explicit: str | None) -> str:
@@ -115,14 +114,13 @@ def build_app_config(
     env: dict[str, str] | None = None,
     autorestart: bool = True,
     out_file: str | Path | None = None,
-    err_file: str | Path | None = None,
+    error_file: str | Path | None = None,
     merge_logs: bool = False,
 ) -> dict[str, Any]:
     """Build the env dict to pass to `axon.rpc_call("prepare", env_dict)`.
 
-    Composition of the helpers above. Output shape matches what PM2's
-    `God.prepare` reads (see lib/God.js lines 109–227, lib/God/ForkMode.js
-    lines 36–86).
+    Output shape matches what PM2's `God.prepare` reads (see lib/God.js lines
+    109–227, lib/God/ForkMode.js lines 36–86).
     """
     cwd_path = Path(cwd).resolve() if cwd is not None else Path.cwd()
     script_path = _resolve_script(script, cwd_path)
@@ -144,8 +142,8 @@ def build_app_config(
     paths = _default_paths(safe_name)
     if out_file is not None:
         paths["pm_out_log_path"] = str(out_file)
-    if err_file is not None:
-        paths["pm_err_log_path"] = str(err_file)
+    if error_file is not None:
+        paths["pm_err_log_path"] = str(error_file)
 
     return {
         "name": safe_name,

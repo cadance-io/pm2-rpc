@@ -35,7 +35,7 @@ AMP_VERSION = 1
 
 
 class PM2Error(RuntimeError):
-    """Raised when the daemon returns an error reply."""
+    pass
 
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes:
@@ -111,13 +111,3 @@ def rpc_call(method: str, *args: Any, timeout: float = 10.0) -> Any:
     return msg
 
 
-def list_methods() -> dict:
-    """Ask the daemon what methods it exposes (uses the {type:'methods'} body)."""
-    req_id = f"{os.getpid()}:0"
-    body = {"type": "methods"}
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-        s.settimeout(5.0)
-        s.connect(str(SOCK_PATH))
-        s.sendall(_encode_amp([body, req_id]))
-        reply_args = _read_amp(s)
-    return reply_args[0].get("methods", {})

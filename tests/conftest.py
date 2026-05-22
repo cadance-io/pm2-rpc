@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import pm2
+import pm2_rpc as pm2
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SLEEPER = FIXTURES / "sleeper.py"

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import _app_config as ac
+from pm2_rpc import _app_config as ac
 
 
 # _sanitize_name --------------------------------------------------------------
@@ -37,10 +37,14 @@ def test_resolve_script_relative_to_cwd(tmp_path: Path) -> None:
     assert ac._resolve_script("x.py", tmp_path) == f
 
 
-def test_resolve_script_falls_back_to_path_lookup(tmp_path: Path) -> None:
-    # `python3` is on PATH on macOS dev boxes — use it as a real fallback target
-    resolved = ac._resolve_script("python3", tmp_path)
-    assert resolved.is_file() and resolved.name in ("python3", "python3.12")
+def test_resolve_script_does_not_fall_back_to_path(tmp_path: Path) -> None:
+    """`python3` is on $PATH but we deliberately do not resolve it.
+
+    Otherwise `pm2.start('python3')` would happily start a bare interpreter
+    that PM2 then thrashes restarting.
+    """
+    with pytest.raises(FileNotFoundError):
+        ac._resolve_script("python3", tmp_path)
 
 
 def test_resolve_script_missing_raises(tmp_path: Path) -> None:
@@ -51,21 +55,27 @@ def test_resolve_script_missing_raises(tmp_path: Path) -> None:
 # _resolve_interpreter --------------------------------------------------------
 
 
-def test_resolve_interpreter_explicit_wins() -> None:
+@pytest.mark.parametrize(
+    "ext,expected",
+    [
+        (".py", sys.executable),
+        (".js", "node"),
+        (".mjs", "node"),
+        (".cjs", "node"),
+        (".ts", "ts-node"),
+        (".sh", "bash"),
+        (".rb", "ruby"),
+        (".php", "php"),
+        (".pl", "perl"),
+        (".whatever", "none"),  # PM2's sentinel for "exec directly"
+    ],
+)
+def test_resolve_interpreter_by_extension(ext, expected) -> None:
+    assert ac._resolve_interpreter(ext, explicit=None) == expected
+
+
+def test_resolve_interpreter_explicit_wins_over_extension() -> None:
     assert ac._resolve_interpreter(".py", "/opt/custom/python") == "/opt/custom/python"
-
-
-def test_resolve_interpreter_python_extension() -> None:
-    assert ac._resolve_interpreter(".py", None) == sys.executable
-
-
-def test_resolve_interpreter_javascript_extension() -> None:
-    assert ac._resolve_interpreter(".js", None) == "node"
-
-
-def test_resolve_interpreter_unknown_returns_none_sentinel() -> None:
-    # PM2 uses the literal string "none" to mean "exec the binary directly"
-    assert ac._resolve_interpreter(".whatever", None) == "none"
 
 
 # _default_paths --------------------------------------------------------------
@@ -160,7 +170,7 @@ def test_build_app_config_custom_log_files(tmp_path: Path) -> None:
     out = tmp_path / "out.log"
     err = tmp_path / "err.log"
     cfg = ac.build_app_config(
-        script=str(script), cwd=tmp_path, out_file=out, err_file=err
+        script=str(script), cwd=tmp_path, out_file=out, error_file=err
     )
     assert cfg["pm_out_log_path"] == str(out)
     assert cfg["pm_err_log_path"] == str(err)

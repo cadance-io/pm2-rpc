@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pm2-rpc"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pure-Python client for PM2's daemon RPC socket"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,9 +21,10 @@ classifiers = [
     "Topic :: System :: Systems Administration",
     "Typing :: Typed",
 ]
-dependencies = [
-    "pyyaml>=6.0.3",
-]
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6"]
 
 [project.urls]
 Repository = "https://github.com/cadance-io/pm2-rpc"
@@ -32,16 +33,14 @@ Issues = "https://github.com/cadance-io/pm2-rpc/issues"
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pyyaml>=6",
 ]
 
 [tool.hatch.build.targets.wheel]
-# Flat layout: ship the two top-level modules as the public surface.
-# `main.py` is a demo entry point and intentionally excluded.
-only-include = ["pm2.py", "axon.py"]
-sources = ["."]
+packages = ["pm2_rpc"]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["pm2.py", "axon.py", "README.md", "LICENSE", "pyproject.toml"]
+only-include = ["pm2_rpc", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

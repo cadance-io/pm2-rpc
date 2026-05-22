@@ -1,47 +1,45 @@
-"""TDD: pm2.restart(target) bumps restart_time. With env=, the merged keys
-land in pm2_env.env and the process's actual environment. With update_env=True,
-the current shell environment is merged."""
+"""restart() bumps restart_time; env= merges keys into the running process."""
 
 from __future__ import annotations
 
 import os
-import time
 
-import pm2
+import pytest
+
+import pm2_rpc as pm2
 
 
 def test_restart_increments_restart_time(running_fixture: str) -> None:
-    before = pm2.describe(running_fixture).restart_time
+    before = pm2.describe(running_fixture)["pm2_env"]["restart_time"]
     pm2.restart(running_fixture)
-    after = pm2.describe(running_fixture).restart_time
+    after = pm2.describe(running_fixture)["pm2_env"]["restart_time"]
     assert after == before + 1
 
 
-def test_restart_returns_online_process(running_fixture: str) -> None:
+def test_restart_returns_online_dict(running_fixture: str) -> None:
     proc = pm2.restart(running_fixture)
-    assert isinstance(proc, pm2.Process)
-    assert proc.name == running_fixture
-    assert proc.status == "online"
-    assert proc.pid is not None and proc.pid > 0
+    assert isinstance(proc, dict)
+    assert proc["pm2_env"]["name"] == running_fixture
+    assert proc["pm2_env"]["status"] == "online"
+    assert proc["pid"] > 0
 
 
 def test_restart_with_env_merges_into_pm2_env(running_fixture: str) -> None:
     pm2.restart(running_fixture, env={"APP_MODE": "suite"})
-    pm2_env = pm2.describe(running_fixture).pm2_env
-    assert pm2_env["env"]["APP_MODE"] == "suite"
+    env = pm2.describe(running_fixture)["pm2_env"]["env"]
+    assert env["APP_MODE"] == "suite"
 
 
-def test_restart_with_update_env_pulls_in_shell_env(
+def test_restart_with_shell_env_splat(
     running_fixture: str, monkeypatch
 ) -> None:
-    key = "PM2RPC_TEST_FLAG"
-    monkeypatch.setenv(key, "from-shell")
-    pm2.restart(running_fixture, update_env=True)
-    pm2_env = pm2.describe(running_fixture).pm2_env
-    assert pm2_env["env"][key] == "from-shell"
+    """The old `update_env=True` flag is gone; callers do this explicitly."""
+    monkeypatch.setenv("PM2RPC_TEST_FLAG", "from-shell")
+    pm2.restart(running_fixture, env={**os.environ})
+    env = pm2.describe(running_fixture)["pm2_env"]["env"]
+    assert env["PM2RPC_TEST_FLAG"] == "from-shell"
 
 
 def test_restart_raises_for_unknown() -> None:
-    import pytest
     with pytest.raises(pm2.NotFound):
         pm2.restart("definitely-not-a-real-pm2-process-xyz")

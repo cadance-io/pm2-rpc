@@ -1,26 +1,24 @@
-"""TDD:
-  * pm2.stop(target) gracefully stops but KEEPS the entry (status='stopped')
-  * pm2.delete(target) removes the entry entirely
-"""
+"""stop() keeps the entry registered (status='stopped'); delete() removes it."""
 
 from __future__ import annotations
 
 import pytest
 
-import pm2
+import pm2_rpc as pm2
 
 
 def test_stop_keeps_entry_with_stopped_status(running_fixture: str) -> None:
     pm2.stop(running_fixture)
     p = pm2.describe(running_fixture)
-    assert p.status == "stopped"
-    assert p.pid is None
+    assert p["pm2_env"]["status"] == "stopped"
+    # PM2 sets pid to 0 on stop; treat falsy as "not running"
+    assert not p.get("pid")
 
 
-def test_stop_returns_process(running_fixture: str) -> None:
+def test_stop_returns_dict(running_fixture: str) -> None:
     p = pm2.stop(running_fixture)
-    assert isinstance(p, pm2.Process)
-    assert p.name == running_fixture
+    assert isinstance(p, dict)
+    assert p["pm2_env"]["name"] == running_fixture
 
 
 def test_delete_removes_entry(running_fixture: str) -> None:
