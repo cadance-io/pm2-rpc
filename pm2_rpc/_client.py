@@ -7,12 +7,14 @@ Returned dicts use PM2's own shape — typically `{"pid": int, "monit": {...},
 
 from __future__ import annotations
 
+import builtins
 import os
 import time
 from pathlib import Path
 from typing import Any
 
 from . import _app_config, axon
+from ._types import EcosystemApp, PM2Process
 
 
 class NotFound(LookupError):
@@ -23,15 +25,15 @@ class UnsupportedConfigError(ValueError):
     pass
 
 
-def _pm_id(p: dict) -> int:
+def _pm_id(p: PM2Process) -> int:
     return p["pm2_env"]["pm_id"]
 
 
-def _name(p: dict) -> str:
+def _name(p: PM2Process) -> str:
     return p["pm2_env"]["name"]
 
 
-def list() -> "list[dict]":
+def list() -> "builtins.list[PM2Process]":
     (raw,) = axon.rpc_call("getMonitorData", {})
     return raw
 
@@ -40,13 +42,13 @@ def exists(name: str) -> bool:
     return any(_name(p) == name for p in list())
 
 
-def _find(target: str | int, procs: "list[dict]") -> dict | None:
+def _find(target: str | int, procs: "builtins.list[PM2Process]") -> PM2Process | None:
     if isinstance(target, int):
         return next((p for p in procs if _pm_id(p) == target), None)
     return next((p for p in procs if _name(p) == target), None)
 
 
-def describe(target: str | int) -> dict:
+def describe(target: str | int) -> PM2Process:
     """Return the process dict for `target` (name or pm_id), or raise NotFound."""
     found = _find(target, list())
     if found is None:
@@ -54,7 +56,7 @@ def describe(target: str | int) -> dict:
     return found
 
 
-def restart(target: str | int, *, env: dict[str, str] | None = None) -> dict:
+def restart(target: str | int, *, env: dict[str, str] | None = None) -> PM2Process:
     """Restart a process. `env` is merged via `Object.assign` server-side, so
     only the keys you pass are touched — to bring in your shell env, do
     `restart(name, env={**os.environ, ...})`."""
@@ -66,7 +68,7 @@ def restart(target: str | int, *, env: dict[str, str] | None = None) -> dict:
     return describe(pm_id)
 
 
-def stop(target: str | int) -> dict:
+def stop(target: str | int) -> PM2Process:
     """Gracefully stop. Keeps the entry registered (status='stopped')."""
     pm_id = _pm_id(describe(target))
     axon.rpc_call("stopProcessId", pm_id)
@@ -101,7 +103,7 @@ def error_logs(target: str | int, lines: int = 15) -> str:
     return _read_log(describe(target)["pm2_env"].get("pm_err_log_path"), lines)
 
 
-def _wait_until_registered(name: str, timeout: float = 5.0) -> dict:
+def _wait_until_registered(name: str, timeout: float = 5.0) -> PM2Process:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -117,13 +119,13 @@ def start(
     name: str | None = None,
     interpreter: str | None = None,
     cwd: str | Path | None = None,
-    args: list[str] | str | None = None,
+    args: "builtins.list[str] | str | None" = None,
     env: dict[str, str] | None = None,
     autorestart: bool = True,
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
     merge_logs: bool = False,
-) -> dict:
+) -> PM2Process:
     """Launch a new process via the daemon's `prepare` RPC.
 
     Builds the app config in Python (see `_app_config.build_app_config`) and
@@ -156,7 +158,7 @@ _ECOSYSTEM_FIELDS = frozenset({
 })
 
 
-def _load_ecosystem(path: Path) -> "list[dict[str, Any]]":
+def _load_ecosystem(path: Path) -> "builtins.list[EcosystemApp]":
     """Parse an ecosystem config file. .json native, .yaml/.yml via optional
     pyyaml extra. .js/.cjs/.mjs raise (need node to evaluate module.exports)."""
     suffix = path.suffix.lower()
@@ -173,7 +175,7 @@ def _load_ecosystem(path: Path) -> "list[dict[str, Any]]":
         data = json.loads(path.read_text())
     elif suffix in (".yaml", ".yml"):
         try:
-            import yaml
+            import yaml  # type: ignore[import-untyped]
         except ImportError as e:
             raise UnsupportedConfigError(
                 f"{path.name}: YAML support needs the `yaml` extra — "
@@ -189,13 +191,16 @@ def _load_ecosystem(path: Path) -> "list[dict[str, Any]]":
     return apps
 
 
-def _ecosystem_app_to_kwargs(app: dict, base_cwd: Path) -> dict[str, Any]:
+def _ecosystem_app_to_kwargs(app: EcosystemApp, base_cwd: Path) -> dict[str, Any]:
     """Filter an ecosystem app entry to the kwargs `start()` accepts."""
-    kwargs = {k: app[k] for k in _ECOSYSTEM_FIELDS if k in app}
+    # Cast to plain dict for dynamic indexing — TypedDict requires literal
+    # string keys, which doesn't compose with our field-set iteration.
+    raw: dict[str, Any] = dict(app)
+    kwargs: dict[str, Any] = {k: raw[k] for k in _ECOSYSTEM_FIELDS if k in raw}
     # PM2's internal name for `interpreter` is `exec_interpreter`; some older
     # ecosystem files use that. Honor it without inventing a Python alias.
-    if "exec_interpreter" in app and "interpreter" not in kwargs:
-        kwargs["interpreter"] = app["exec_interpreter"]
+    if "exec_interpreter" in raw and "interpreter" not in kwargs:
+        kwargs["interpreter"] = raw["exec_interpreter"]
     kwargs.setdefault("cwd", str(base_cwd))
     return kwargs
 
@@ -205,7 +210,7 @@ def start_ecosystem(
     *,
     only: str | None = None,
     cwd: str | Path | None = None,
-) -> "list[dict]":
+) -> "builtins.list[PM2Process]":
     """Bootstrap one or more apps from an ecosystem config file.
 
     `only=NAME` matches `pm2 start --only NAME` — sibling apps in the file are
@@ -220,7 +225,7 @@ def start_ecosystem(
         if not apps:
             raise NotFound(f"no app named {only!r} in {config_path.name}")
 
-    started: "list[dict]" = []
+    started: "builtins.list[PM2Process]" = []
     for app in apps:
         if "script" not in app:
             raise UnsupportedConfigError(f"app entry missing required `script`: {app!r}")

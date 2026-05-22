@@ -7,6 +7,7 @@ runtime.
 
 from __future__ import annotations
 
+from ._types import AppConfig, EcosystemApp, PM2Env, PM2Monit, PM2Process
 from .axon import PM2Error, SOCK_PATH, rpc_call
 from ._client import (
     NotFound,
@@ -25,11 +26,20 @@ from ._client import (
 )
 
 __all__ = [
+    # exceptions
     "PM2Error",
     "NotFound",
     "UnsupportedConfigError",
+    # types
+    "PM2Process",
+    "PM2Env",
+    "PM2Monit",
+    "AppConfig",
+    "EcosystemApp",
+    # constants + low-level
     "SOCK_PATH",
     "rpc_call",
+    # high-level API
     "list",
     "exists",
     "describe",

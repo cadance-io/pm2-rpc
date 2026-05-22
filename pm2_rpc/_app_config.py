@@ -13,7 +13,8 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from typing import Any
+
+from ._types import AppConfig
 
 # PM2 stores all per-process files under ~/.pm2/ — log/pid templates here mirror
 # what `Common.sink` does in lib/Common.js so the daemon's executeApp finds
@@ -116,7 +117,7 @@ def build_app_config(
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
     merge_logs: bool = False,
-) -> dict[str, Any]:
+) -> AppConfig:
     """Build the env dict to pass to `axon.rpc_call("prepare", env_dict)`.
 
     Output shape matches what PM2's `God.prepare` reads (see lib/God.js lines
@@ -159,5 +160,8 @@ def build_app_config(
         "instances": 1,
         "merge_logs": merge_logs,
         "vizion": False,
-        **paths,
+        "pm_out_log_path": paths["pm_out_log_path"],
+        "pm_err_log_path": paths["pm_err_log_path"],
+        "pm_log_path": paths["pm_log_path"],
+        "pm_pid_path": paths["pm_pid_path"],
     }

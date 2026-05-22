@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pm2-rpc"
-version = "0.2.0"
+version = "0.2.1"
 description = "Pure-Python client for PM2's daemon RPC socket"
 readme = "README.md"
 requires-python = ">=3.12"
