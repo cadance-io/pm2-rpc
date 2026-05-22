@@ -117,3 +117,6 @@ class EcosystemApp(TypedDict, total=False):
     error_file: str
     merge_logs: bool
     autorestart: bool
+    kill_timeout: int
+    kill_signal: str
+    watch: bool | list[str]

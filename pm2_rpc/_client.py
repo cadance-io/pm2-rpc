@@ -191,6 +191,9 @@ _ECOSYSTEM_FIELDS = frozenset(
         "error_file",
         "merge_logs",
         "autorestart",
+        "kill_timeout",
+        "kill_signal",
+        "watch",
     }
 )
 
