@@ -41,3 +41,11 @@ def test_restart_with_shell_env_splat(running_fixture: str, monkeypatch) -> None
 def test_restart_raises_for_unknown() -> None:
     with pytest.raises(pm2.NotFound):
         pm2.restart("definitely-not-a-real-pm2-process-xyz")
+
+
+def test_restart_with_kill_timeout_updates_pm2_env(running_fixture: str) -> None:
+    before = pm2.describe(running_fixture)["pm2_env"].get("kill_timeout")
+    pm2.restart(running_fixture, kill_timeout=7777)
+    after = pm2.describe(running_fixture)["pm2_env"]["kill_timeout"]
+    assert after == 7777
+    assert before != 7777
