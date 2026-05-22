@@ -5,6 +5,9 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+*"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     name: Build and validate
@@ -22,9 +25,9 @@ jobs:
             echo "::error::Tag v$TAG does not match pyproject.toml version $PKG"
             exit 1
           fi
-      # NOTE: the test suite drives a real PM2 daemon and cannot run in CI,
-      # so we only validate the build artifact here. Run `uv run pytest`
-      # locally before tagging a release.
+      # Tests run on every push/PR via ci.yml — publish skips them to
+      # keep the release path fast and decoupled from network/runtime
+      # state. The tag gate above is the merge-readiness signal.
       - run: uv build
       - uses: actions/upload-artifact@v4
         with:

@@ -5,16 +5,34 @@ on:
   push:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
-  # Tests need a live PM2 daemon and don't run on stock GitHub-hosted
-  # runners — CI validates lint / format / typecheck / build instead.
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
       - run: uv sync --group dev
+
+      # static checks (cheapest, fail fast)
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run mypy
+
+      # full test suite against a real PM2 daemon
+      - name: Start PM2 daemon
+        run: |
+          npm install -g pm2
+          pm2 ping
+          timeout 10 bash -c 'until [ -S "$HOME/.pm2/rpc.sock" ]; do sleep 0.1; done'
+      - run: uv run pytest -q
+      - name: Stop PM2 daemon
+        if: always()
+        run: pm2 kill || true
+
+      # build the artifact last
       - run: uv build
