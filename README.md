@@ -18,7 +18,7 @@ pip install pm2-rpc           # core (only stdlib)
 pip install 'pm2-rpc[yaml]'   # add YAML ecosystem-config support
 ```
 
-Requires Python ≥ 3.12 and a running PM2 daemon on the same host.
+Requires Python ≥ 3.11 and a running PM2 daemon on the same host.
 
 ## Quick start
 
@@ -102,8 +102,8 @@ uv run ruff format          # format (omit --check to apply)
 uv run mypy                 # typecheck pm2_rpc/
 ```
 
-CI runs lint + format + typecheck + build on every PR (the test suite stays
-local because it needs PM2 running).
+CI runs lint + format + typecheck + the full 64-test suite + build on every
+PR — PM2 is installed from npm on the runner.
 
 Fixture processes are named `pm2rpc-test-*` so they're easy to identify
 if a test crashes and leaks one.
