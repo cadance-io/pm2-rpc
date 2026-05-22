@@ -1,5 +1,5 @@
 """TDD: pm2.start_ecosystem() parses .json/.yaml natively over the socket.
-       --only filter must NOT touch sibling apps. .js raises UnsupportedConfigError."""
+--only filter must NOT touch sibling apps. .js raises UnsupportedConfigError."""
 
 from __future__ import annotations
 
@@ -80,9 +80,7 @@ def test_start_ecosystem_starts_all_apps_when_only_omitted(
     assert names == {name_a, name_b}
 
 
-def test_start_ecosystem_respects_cwd(
-    two_app_names: tuple[str, str], tmp_path: Path
-) -> None:
+def test_start_ecosystem_respects_cwd(two_app_names: tuple[str, str], tmp_path: Path) -> None:
     name_a, _ = two_app_names
     config = _write_json(tmp_path, _two_app_payload(name_a, _ + "ignored"))
     pm2.start_ecosystem(config, only=name_a, cwd=tmp_path)

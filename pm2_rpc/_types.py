@@ -24,7 +24,7 @@ class PM2Env(TypedDict, total=False):
     namespace: str
     unique_id: str
     # lifecycle
-    status: str          # "online" | "stopped" | "stopping" | "launching" | "errored"
+    status: str  # "online" | "stopped" | "stopping" | "launching" | "errored"
     restart_time: int
     unstable_restarts: int
     created_at: int
@@ -34,7 +34,7 @@ class PM2Env(TypedDict, total=False):
     pm_exec_path: str
     pm_cwd: str
     exec_interpreter: str
-    exec_mode: str       # "fork_mode" | "cluster_mode"
+    exec_mode: str  # "fork_mode" | "cluster_mode"
     args: list[str]
     node_args: list[str]
     instances: int
@@ -64,7 +64,7 @@ class PM2Process(TypedDict):
     pid: NotRequired[int | None]
     pm2_env: PM2Env
     monit: NotRequired[PM2Monit]
-    name: NotRequired[str]      # mirror of pm2_env.name at top level
+    name: NotRequired[str]  # mirror of pm2_env.name at top level
 
 
 class AppConfig(TypedDict):
@@ -73,6 +73,7 @@ class AppConfig(TypedDict):
     Every field is required — build_app_config() always emits all of them
     and the daemon's executeApp expects them.
     """
+
     name: str
     script: str
     pm_exec_path: str
@@ -98,13 +99,14 @@ class EcosystemApp(TypedDict, total=False):
     Only `script` is truly required by PM2's schema; everything else has
     a sensible default.
     """
+
     script: str
     name: str
     args: list[str] | str
     cwd: str
     env: dict[str, str]
     interpreter: str
-    exec_interpreter: str       # legacy synonym for `interpreter`
+    exec_interpreter: str  # legacy synonym for `interpreter`
     out_file: str
     error_file: str
     merge_logs: bool

@@ -30,9 +30,7 @@ def test_restart_with_env_merges_into_pm2_env(running_fixture: str) -> None:
     assert env["APP_MODE"] == "suite"
 
 
-def test_restart_with_shell_env_splat(
-    running_fixture: str, monkeypatch
-) -> None:
+def test_restart_with_shell_env_splat(running_fixture: str, monkeypatch) -> None:
     """The old `update_env=True` flag is gone; callers do this explicitly."""
     monkeypatch.setenv("PM2RPC_TEST_FLAG", "from-shell")
     pm2.restart(running_fixture, env={**os.environ})

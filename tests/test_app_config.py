@@ -10,7 +10,6 @@ import pytest
 
 from pm2_rpc import _app_config as ac
 
-
 # _sanitize_name --------------------------------------------------------------
 
 
@@ -169,8 +168,6 @@ def test_build_app_config_custom_log_files(tmp_path: Path) -> None:
     script.write_text("")
     out = tmp_path / "out.log"
     err = tmp_path / "err.log"
-    cfg = ac.build_app_config(
-        script=str(script), cwd=tmp_path, out_file=out, error_file=err
-    )
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, out_file=out, error_file=err)
     assert cfg["pm_out_log_path"] == str(out)
     assert cfg["pm_err_log_path"] == str(err)

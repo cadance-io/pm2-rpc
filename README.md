@@ -97,7 +97,13 @@ rpc_call("getMonitorData", {})   # raw axon-rpc round-trip
 ```bash
 uv sync --group dev
 uv run pytest tests/        # 64 tests, ~6s, requires a live PM2 daemon
+uv run ruff check           # lint
+uv run ruff format          # format (omit --check to apply)
+uv run mypy                 # typecheck pm2_rpc/
 ```
+
+CI runs lint + format + typecheck + build on every PR (the test suite stays
+local because it needs PM2 running).
 
 Fixture processes are named `pm2rpc-test-*` so they're easy to identify
 if a test crashes and leaks one.

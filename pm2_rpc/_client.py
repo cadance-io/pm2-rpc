@@ -33,7 +33,7 @@ def _name(p: PM2Process) -> str:
     return p["pm2_env"]["name"]
 
 
-def list() -> "builtins.list[PM2Process]":
+def list() -> builtins.list[PM2Process]:
     (raw,) = axon.rpc_call("getMonitorData", {})
     return raw
 
@@ -42,7 +42,7 @@ def exists(name: str) -> bool:
     return any(_name(p) == name for p in list())
 
 
-def _find(target: str | int, procs: "builtins.list[PM2Process]") -> PM2Process | None:
+def _find(target: str | int, procs: builtins.list[PM2Process]) -> PM2Process | None:
     if isinstance(target, int):
         return next((p for p in procs if _pm_id(p) == target), None)
     return next((p for p in procs if _name(p) == target), None)
@@ -119,7 +119,7 @@ def start(
     name: str | None = None,
     interpreter: str | None = None,
     cwd: str | Path | None = None,
-    args: "builtins.list[str] | str | None" = None,
+    args: builtins.list[str] | str | None = None,
     env: dict[str, str] | None = None,
     autorestart: bool = True,
     out_file: str | Path | None = None,
@@ -152,13 +152,22 @@ _JS_CONFIG_SUFFIXES = (".js", ".cjs", ".mjs")
 
 # Ecosystem fields we accept verbatim from the config file. Names match PM2's
 # own vocabulary so users don't have to learn a parallel one.
-_ECOSYSTEM_FIELDS = frozenset({
-    "name", "args", "cwd", "env", "interpreter",
-    "out_file", "error_file", "merge_logs", "autorestart",
-})
+_ECOSYSTEM_FIELDS = frozenset(
+    {
+        "name",
+        "args",
+        "cwd",
+        "env",
+        "interpreter",
+        "out_file",
+        "error_file",
+        "merge_logs",
+        "autorestart",
+    }
+)
 
 
-def _load_ecosystem(path: Path) -> "builtins.list[EcosystemApp]":
+def _load_ecosystem(path: Path) -> builtins.list[EcosystemApp]:
     """Parse an ecosystem config file. .json native, .yaml/.yml via optional
     pyyaml extra. .js/.cjs/.mjs raise (need node to evaluate module.exports)."""
     suffix = path.suffix.lower()
@@ -178,8 +187,7 @@ def _load_ecosystem(path: Path) -> "builtins.list[EcosystemApp]":
             import yaml  # type: ignore[import-untyped]
         except ImportError as e:
             raise UnsupportedConfigError(
-                f"{path.name}: YAML support needs the `yaml` extra — "
-                "`pip install pm2-rpc[yaml]`."
+                f"{path.name}: YAML support needs the `yaml` extra — `pip install pm2-rpc[yaml]`."
             ) from e
         data = yaml.safe_load(path.read_text())
     else:
@@ -210,7 +218,7 @@ def start_ecosystem(
     *,
     only: str | None = None,
     cwd: str | Path | None = None,
-) -> "builtins.list[PM2Process]":
+) -> builtins.list[PM2Process]:
     """Bootstrap one or more apps from an ecosystem config file.
 
     `only=NAME` matches `pm2 start --only NAME` — sibling apps in the file are
@@ -225,7 +233,7 @@ def start_ecosystem(
         if not apps:
             raise NotFound(f"no app named {only!r} in {config_path.name}")
 
-    started: "builtins.list[PM2Process]" = []
+    started: builtins.list[PM2Process] = []
     for app in apps:
         if "script" not in app:
             raise UnsupportedConfigError(f"app entry missing required `script`: {app!r}")

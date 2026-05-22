@@ -109,5 +109,3 @@ def rpc_call(method: str, *args: Any, timeout: float = 10.0) -> Any:
     if isinstance(msg, dict) and "args" in msg:
         return msg["args"]
     return msg
-
-

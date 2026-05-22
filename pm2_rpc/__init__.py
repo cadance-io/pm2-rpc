@@ -7,48 +7,48 @@ runtime.
 
 from __future__ import annotations
 
-from ._types import AppConfig, EcosystemApp, PM2Env, PM2Monit, PM2Process
-from .axon import PM2Error, SOCK_PATH, rpc_call
 from ._client import (
     NotFound,
     UnsupportedConfigError,
-    list,
-    exists,
+    delete,
     describe,
+    env,
+    error_logs,
+    exists,
+    list,
+    logs,
+    restart,
     start,
     start_ecosystem,
-    restart,
     stop,
-    delete,
-    env,
-    logs,
-    error_logs,
 )
+from ._types import AppConfig, EcosystemApp, PM2Env, PM2Monit, PM2Process
+from .axon import SOCK_PATH, PM2Error, rpc_call
 
 __all__ = [
-    # exceptions
-    "PM2Error",
-    "NotFound",
-    "UnsupportedConfigError",
-    # types
-    "PM2Process",
-    "PM2Env",
-    "PM2Monit",
-    "AppConfig",
-    "EcosystemApp",
     # constants + low-level
     "SOCK_PATH",
-    "rpc_call",
+    "AppConfig",
+    "EcosystemApp",
+    "NotFound",
+    "PM2Env",
+    # exceptions
+    "PM2Error",
+    "PM2Monit",
+    # types
+    "PM2Process",
+    "UnsupportedConfigError",
+    "delete",
+    "describe",
+    "env",
+    "error_logs",
+    "exists",
     # high-level API
     "list",
-    "exists",
-    "describe",
+    "logs",
+    "restart",
+    "rpc_call",
     "start",
     "start_ecosystem",
-    "restart",
     "stop",
-    "delete",
-    "env",
-    "logs",
-    "error_logs",
 ]

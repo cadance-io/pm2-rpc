@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 import pm2_rpc as pm2
-from tests.conftest import SLEEPER, fixture_name as fixture_name, unique_name  # noqa: F401 (re-export for clarity)
+from tests.conftest import SLEEPER, unique_name
+from tests.conftest import fixture_name as fixture_name
 
 
 def test_start_returns_online_dict(fixture_name: str) -> None:

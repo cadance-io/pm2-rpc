@@ -51,7 +51,7 @@ def _resolve_script(script: str | Path, cwd: Path) -> Path:
     """Resolve `script` to an absolute path relative to `cwd`.
 
     Intentionally does NOT fall back to $PATH (unlike lib/Common.js lines
-    148–163) — silently turning `pm2.start("python3")` into a thrashing
+    148-163) — silently turning `pm2.start("python3")` into a thrashing
     interpreter process is a worse UX than a clean FileNotFoundError. Pass
     `shutil.which(...)`'s result if you actually want a PATH binary.
     """
@@ -65,7 +65,7 @@ def _resolve_script(script: str | Path, cwd: Path) -> Path:
 def _resolve_interpreter(ext: str, explicit: str | None) -> str:
     """Pick an interpreter for the given file extension.
 
-    Mirrors lib/Common.js `Common.sink.resolveInterpreter` (lines 442–495)
+    Mirrors lib/Common.js `Common.sink.resolveInterpreter` (lines 442-495)
     for the MVP set. Explicit user value wins; unknown extensions get the
     `"none"` sentinel so PM2 execs the file directly.
     """
@@ -121,7 +121,7 @@ def build_app_config(
     """Build the env dict to pass to `axon.rpc_call("prepare", env_dict)`.
 
     Output shape matches what PM2's `God.prepare` reads (see lib/God.js lines
-    109–227, lib/God/ForkMode.js lines 36–86).
+    109-227, lib/God/ForkMode.js lines 36-86).
     """
     cwd_path = Path(cwd).resolve() if cwd is not None else Path.cwd()
     script_path = _resolve_script(script, cwd_path)

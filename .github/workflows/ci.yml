@@ -6,13 +6,15 @@ on:
     branches: [main]
 
 jobs:
-  # The full test suite requires a running PM2 daemon and cannot execute
-  # on stock GitHub-hosted runners, so CI only validates that the sdist
-  # and wheel still build cleanly.
+  # Tests need a live PM2 daemon and don't run on stock GitHub-hosted
+  # runners — CI validates lint / format / typecheck / build instead.
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --group dev
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy
       - run: uv build
