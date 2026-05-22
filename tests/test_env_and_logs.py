@@ -20,9 +20,9 @@ def test_env_returns_dict_with_expected_keys(running_fixture: str) -> None:
 
 
 def test_env_reflects_merged_env_after_restart(running_fixture: str) -> None:
-    pm2.restart(running_fixture, env={"CADANCE_TEST_SERVER_MODE": "suite"})
+    pm2.restart(running_fixture, env={"APP_MODE": "suite"})
     env = pm2.env(running_fixture)
-    assert env["CADANCE_TEST_SERVER_MODE"] == "suite"
+    assert env["APP_MODE"] == "suite"
 
 
 def test_env_raises_for_unknown() -> None:

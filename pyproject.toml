@@ -21,7 +21,9 @@ classifiers = [
     "Topic :: System :: Systems Administration",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0.3",
+]
 
 [project.urls]
 Repository = "https://github.com/cadance-io/pm2-rpc"

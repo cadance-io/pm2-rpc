@@ -26,9 +26,9 @@ def test_restart_returns_online_process(running_fixture: str) -> None:
 
 
 def test_restart_with_env_merges_into_pm2_env(running_fixture: str) -> None:
-    pm2.restart(running_fixture, env={"CADANCE_TEST_SERVER_MODE": "suite"})
+    pm2.restart(running_fixture, env={"APP_MODE": "suite"})
     pm2_env = pm2.describe(running_fixture).pm2_env
-    assert pm2_env["env"]["CADANCE_TEST_SERVER_MODE"] == "suite"
+    assert pm2_env["env"]["APP_MODE"] == "suite"
 
 
 def test_restart_with_update_env_pulls_in_shell_env(

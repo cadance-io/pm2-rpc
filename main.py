@@ -1,4 +1,4 @@
-"""Demo: walk through the CADANCE_TEST_SERVER_MODE flip workflow.
+"""Demo: walk through the APP_MODE flip workflow.
 
 Mirrors the CLI flow:
     pm2 describe <name>                    # existence probe
@@ -42,20 +42,20 @@ def show_list() -> None:
 
 
 def ensure_suite_mode(name: str, ecosystem: str) -> None:
-    """Make sure `name` is running with CADANCE_TEST_SERVER_MODE=suite."""
+    """Make sure `name` is running with APP_MODE=suite."""
     if not pm2.exists(name):
         print(f"[bootstrap] {name} not registered → starting from {ecosystem}")
         pm2.start_ecosystem(ecosystem, only=name)
         return
 
-    current = pm2.env(name).get("CADANCE_TEST_SERVER_MODE")
+    current = pm2.env(name).get("APP_MODE")
     if current == "suite":
         print(f"[skip] {name} already in suite mode")
         return
 
     print(f"[flip] {name} mode {current!r} → 'suite'")
     try:
-        pm2.restart(name, env={"CADANCE_TEST_SERVER_MODE": "suite"})
+        pm2.restart(name, env={"APP_MODE": "suite"})
     except axon.PM2Error:
         print(f"[error] restart failed — last logs:\n{pm2.logs(name, lines=20)}")
         raise
