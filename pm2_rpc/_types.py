@@ -7,8 +7,6 @@ lie about what's present. Extras PM2 may add still flow through at
 runtime (TypedDict doesn't reject unknown keys).
 """
 
-from __future__ import annotations
-
 from typing import Any, NotRequired, TypedDict
 
 
@@ -58,6 +56,7 @@ class PM2Env(TypedDict, total=False):
     axm_dynamic: dict[str, Any]
     version: str
     kill_timeout: int
+    kill_signal: str
 
 
 class PM2Process(TypedDict):
@@ -70,8 +69,9 @@ class PM2Process(TypedDict):
 class AppConfig(TypedDict):
     """The env dict pm2_rpc sends to the daemon's `prepare` RPC.
 
-    Every field is required — build_app_config() always emits all of them
-    and the daemon's executeApp expects them.
+    All keys without `NotRequired` are always emitted by build_app_config()
+    and required by the daemon's executeApp. The optional keys (kill_timeout,
+    kill_signal, watch) are emitted only when the caller passes them.
     """
 
     name: str
@@ -91,6 +91,9 @@ class AppConfig(TypedDict):
     pm_err_log_path: str
     pm_log_path: str
     pm_pid_path: str
+    kill_timeout: NotRequired[int]
+    kill_signal: NotRequired[str]
+    watch: NotRequired[bool | list[str]]
 
 
 class EcosystemApp(TypedDict, total=False):
