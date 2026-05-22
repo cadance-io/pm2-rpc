@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
 from pm2_rpc import _app_config as ac
+from pm2_rpc._types import AppConfig, PM2Env
 
 # _sanitize_name --------------------------------------------------------------
 
@@ -171,3 +173,57 @@ def test_build_app_config_custom_log_files(tmp_path: Path) -> None:
     cfg = ac.build_app_config(script=str(script), cwd=tmp_path, out_file=out, error_file=err)
     assert cfg["pm_out_log_path"] == str(out)
     assert cfg["pm_err_log_path"] == str(err)
+
+
+def test_appconfig_has_optional_lifecycle_keys() -> None:
+    hints = get_type_hints(AppConfig, include_extras=False)
+    assert "kill_timeout" in hints
+    assert "kill_signal" in hints
+    assert "watch" in hints
+    assert "kill_timeout" in AppConfig.__optional_keys__
+    assert "kill_signal" in AppConfig.__optional_keys__
+    assert "watch" in AppConfig.__optional_keys__
+
+
+def test_pm2env_exposes_kill_signal() -> None:
+    assert "kill_signal" in get_type_hints(PM2Env, include_extras=False)
+
+
+# build_app_config — kill_timeout / kill_signal / watch -----------------------
+
+
+def test_build_app_config_omits_lifecycle_keys_by_default(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path)
+    assert "kill_timeout" not in cfg
+    assert "kill_signal" not in cfg
+    assert "watch" not in cfg
+
+
+def test_build_app_config_emits_kill_timeout_when_set(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, kill_timeout=10000)
+    assert cfg["kill_timeout"] == 10000
+
+
+def test_build_app_config_emits_kill_signal_when_set(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, kill_signal="SIGINT")
+    assert cfg["kill_signal"] == "SIGINT"
+
+
+def test_build_app_config_emits_watch_bool(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, watch=True)
+    assert cfg["watch"] is True
+
+
+def test_build_app_config_emits_watch_paths(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(script=str(script), cwd=tmp_path, watch=["src", "config.yaml"])
+    assert cfg["watch"] == ["src", "config.yaml"]

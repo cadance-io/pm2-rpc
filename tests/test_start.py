@@ -65,3 +65,26 @@ def test_start_does_not_fall_back_to_path(fixture_name: str) -> None:
     """`pm2.start('python3')` used to silently find /usr/bin/python3 — gone."""
     with pytest.raises(FileNotFoundError):
         pm2.start("python3", name=fixture_name)
+
+
+def test_start_passes_kill_timeout_to_pm2_env(fixture_name: str) -> None:
+    pm2.start(str(SLEEPER), name=fixture_name, kill_timeout=7777)
+    assert pm2.describe(fixture_name)["pm2_env"]["kill_timeout"] == 7777
+
+
+def test_start_passes_kill_signal_to_pm2_env(fixture_name: str) -> None:
+    pm2.start(str(SLEEPER), name=fixture_name, kill_signal="SIGINT")
+    assert pm2.describe(fixture_name)["pm2_env"]["kill_signal"] == "SIGINT"
+
+
+def test_start_passes_watch_bool_to_pm2_env(fixture_name: str) -> None:
+    pm2.start(str(SLEEPER), name=fixture_name, watch=True)
+    assert pm2.describe(fixture_name)["pm2_env"]["watch"] is True
+
+
+def test_start_omits_lifecycle_keys_by_default(fixture_name: str) -> None:
+    """No behavior change for existing callers: PM2's own defaults apply."""
+    pm2.start(str(SLEEPER), name=fixture_name)
+    env = pm2.describe(fixture_name)["pm2_env"]
+    assert env.get("kill_timeout") in (None, 1600)
+    assert env.get("watch") in (None, False)

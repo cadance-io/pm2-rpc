@@ -56,14 +56,29 @@ def describe(target: str | int) -> PM2Process:
     return found
 
 
-def restart(target: str | int, *, env: dict[str, str] | None = None) -> PM2Process:
+def restart(
+    target: str | int,
+    *,
+    env: dict[str, str] | None = None,
+    kill_timeout: int | None = None,
+) -> PM2Process:
     """Restart a process. `env` is merged via `Object.assign` server-side, so
     only the keys you pass are touched — to bring in your shell env, do
-    `restart(name, env={**os.environ, ...})`."""
+    `restart(name, env={**os.environ, ...})`.
+
+    `kill_timeout` (ms) overrides `pm2_env.kill_timeout` for the next stop +
+    every subsequent stop until changed again."""
     pm_id = _pm_id(describe(target))
     opts: dict[str, Any] = {"id": pm_id}
-    if env:
-        opts["env"] = env
+    # PM2's God.restartProcessId does `Common.extend(proc.pm2_env, opts.env)`
+    # — it merges every key in `env` onto pm2_env, not just env-var names. We
+    # ride that path to update `kill_timeout` live; a top-level opts key is
+    # silently ignored by the daemon.
+    merged_env: dict[str, Any] = dict(env) if env else {}
+    if kill_timeout is not None:
+        merged_env["kill_timeout"] = kill_timeout
+    if merged_env:
+        opts["env"] = merged_env
     axon.rpc_call("restartProcessId", opts)
     return describe(pm_id)
 
@@ -125,12 +140,22 @@ def start(
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
     merge_logs: bool = False,
+    kill_timeout: int | None = None,
+    kill_signal: str | None = None,
+    watch: bool | builtins.list[str] | None = None,
 ) -> PM2Process:
     """Launch a new process via the daemon's `prepare` RPC.
 
     Builds the app config in Python (see `_app_config.build_app_config`) and
     polls until the process appears in `getMonitorData` before returning —
     `prepare` returns before the daemon finishes registering.
+
+    `kill_timeout` (ms) raises PM2's 1600ms graceful-shutdown window; bump it
+    for apps whose SIGTERM propagation takes longer (e.g., a uvicorn dev
+    server whose multiprocessing-spawn worker needs several seconds).
+    `kill_signal` swaps the stop signal (e.g., "SIGINT" for jupyter/ipython
+    which trap SIGINT). `watch=True` or a list of paths delegates file-watch
+    + restart to PM2 instead of embedding it in the app.
     """
     cfg = _app_config.build_app_config(
         script=script,
@@ -143,6 +168,9 @@ def start(
         out_file=out_file,
         error_file=error_file,
         merge_logs=merge_logs,
+        kill_timeout=kill_timeout,
+        kill_signal=kill_signal,
+        watch=watch,
     )
     axon.rpc_call("prepare", cfg)
     return _wait_until_registered(cfg["name"])
@@ -163,6 +191,9 @@ _ECOSYSTEM_FIELDS = frozenset(
         "error_file",
         "merge_logs",
         "autorestart",
+        "kill_timeout",
+        "kill_signal",
+        "watch",
     }
 )
 
