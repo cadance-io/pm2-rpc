@@ -7,6 +7,9 @@ lie about what's present. Extras PM2 may add still flow through at
 runtime (TypedDict doesn't reject unknown keys).
 """
 
+# NB: do NOT add `from __future__ import annotations` here — PEP 563 deferred
+# evaluation prevents TypedDict.__optional_keys__/__required_keys__ from
+# populating correctly on Python 3.11 (see CPython #97727).
 from typing import Any, NotRequired, TypedDict
 
 
