@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: uv sync --group dev
       - name: Verify tag matches package version
         # GITHUB_REF is a trusted Actions-supplied env var, not user input.
@@ -42,7 +42,7 @@ jobs:
       # No checkout / sync here — we only need the uv binary to invoke
       # `uv publish` against the artifact downloaded below. Disable caching
       # since there is no lockfile in the workdir for setup-uv to key on.
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: false
       - uses: actions/download-artifact@v8
