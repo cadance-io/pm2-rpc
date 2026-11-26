@@ -311,8 +311,9 @@ def launch_daemon(pm2_root: Path, *, node: str = "node", timeout: float = 10.0) 
     with its output in `PM2_HOME/pm2.log`. Env `_` names `bin/pm2`, because the
     daemon's crash recovery runs `node $_ update` (lib/Daemon.js line 50).
 
-    Raises FileNotFoundError when `node` or `lib/Daemon.js` is missing, and
-    TimeoutError when the daemon exits or does not answer ping in `timeout`s.
+    Raises FileNotFoundError when `node` or `lib/Daemon.js` is missing,
+    PM2Error when the daemon exits before it answers ping, and TimeoutError
+    when it does not answer ping in `timeout` seconds.
     """
     if _answers_ping():
         return
@@ -351,7 +352,7 @@ def launch_daemon(pm2_root: Path, *, node: str = "node", timeout: float = 10.0) 
         if _answers_ping():
             return
         if proc.poll() is not None:
-            raise TimeoutError(
+            raise axon.PM2Error(
                 f"pm2 daemon exited with code {proc.returncode} before it answered ping; "
                 f"see {log_path}"
             )
@@ -360,8 +361,10 @@ def launch_daemon(pm2_root: Path, *, node: str = "node", timeout: float = 10.0) 
 
 
 def _answers_ping() -> bool:
+    """False only when nothing listens on the socket, as Client.pingDaemon
+    decides. A slow reply is a live daemon, so a timeout propagates."""
     try:
-        axon.rpc_call("ping", timeout=1.0)
-    except OSError:
+        axon.rpc_call("ping")
+    except (FileNotFoundError, ConnectionRefusedError):
         return False
     return True

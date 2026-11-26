@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from pm2_rpc import _client
+from pm2_rpc import PM2Error, _client
 from tests.conftest import SLEEPER
 
 _CHILD = """
@@ -95,7 +95,7 @@ def test_launch_daemon_reports_a_daemon_that_exits(no_daemon: Path) -> None:
     fake_root = no_daemon / "fake-pm2"
     (fake_root / "lib").mkdir(parents=True)
     (fake_root / "lib" / "Daemon.js").write_text("console.error('boom'); process.exit(3)")
-    with pytest.raises(TimeoutError, match="exited with code 3"):
+    with pytest.raises(PM2Error, match="exited with code 3"):
         _client.launch_daemon(fake_root)
     assert "boom" in (no_daemon / "pm2.log").read_text()
 

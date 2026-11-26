@@ -44,6 +44,17 @@ def test_resolve_script_falls_back_to_path_like_common_js_131(tmp_path: Path) ->
     assert ac._resolve_script("sleep", tmp_path) == Path(shutil.which("sleep") or "")
 
 
+def test_resolve_script_path_fallback_is_absolute(tmp_path: Path, monkeypatch) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool = bin_dir / "tool"
+    tool.write_text("#!/bin/sh\n")
+    tool.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PATH", "bin")
+    assert ac._resolve_script("tool", tmp_path / "elsewhere") == tool
+
+
 def test_resolve_script_prefers_cwd_file_over_path(tmp_path: Path) -> None:
     f = tmp_path / "sleep"
     f.write_text("")

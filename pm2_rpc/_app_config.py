@@ -57,7 +57,7 @@ def _resolve_script(script: str | Path, cwd: Path) -> Path:
     found = shutil.which(str(script))
     if found is None:
         raise FileNotFoundError(f"script not found in {cwd} or on $PATH: {script}")
-    return Path(found)
+    return Path(found).resolve()
 
 
 def _resolve_interpreter(ext: str, explicit: str | None) -> str:
@@ -75,8 +75,8 @@ def _resolve_interpreter(ext: str, explicit: str | None) -> str:
 def _default_paths(name: str) -> dict[str, str]:
     """Compute default log/pid paths for a process named `name`.
 
-    Matches PM2's `~/.pm2/logs/<name>-out.log` / `<name>-error.log` /
-    `<name>.log` and `~/.pm2/pids/<name>.pid` conventions.
+    Matches PM2's `$PM2_HOME/logs/<name>-out.log` / `<name>-error.log` /
+    `<name>.log` and `$PM2_HOME/pids/<name>.pid` conventions.
     """
     _LOG_DIR.mkdir(parents=True, exist_ok=True)
     _PID_DIR.mkdir(parents=True, exist_ok=True)
@@ -166,6 +166,10 @@ def build_app_config(
     - `merge_logs: True` (lib/Common.js lines 865-868, fork mode). When it is
       false, lib/God.js line 208 appends `-<pm_id>` to each log path.
     - `PWD=cwd` in the app env (lib/Common.js line 116).
+    - `namespace: "default"` (schema.json line 27). lib/God/ActionMethods.js
+      line 796 matches a process by it.
+    - `wait_ready: False`. lib/God.js lines 323 and 384 mark the process
+      online at once unless it is set.
     """
     cwd_path = Path(cwd).resolve() if cwd is not None else Path.cwd()
     script_path = _resolve_script(script, cwd_path)
