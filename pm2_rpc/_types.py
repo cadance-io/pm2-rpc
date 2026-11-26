@@ -12,6 +12,10 @@ runtime (TypedDict doesn't reject unknown keys).
 # populating correctly on Python 3.11 (see CPython #97727).
 from typing import Any, NotRequired, TypedDict
 
+# pm2's `filter_env`: True drops the shell env, a str drops one var by exact
+# name, a list drops each var whose name contains an item.
+FilterEnv = bool | str | list[str]
+
 
 class PM2Monit(TypedDict, total=False):
     cpu: int
@@ -60,6 +64,10 @@ class PM2Env(TypedDict, total=False):
     version: str
     kill_timeout: int
     kill_signal: str
+    treekill: bool
+    ignore_watch: list[str] | str
+    wait_ready: bool
+    listen_timeout: int
 
 
 class PM2Process(TypedDict):
@@ -74,7 +82,8 @@ class AppConfig(TypedDict):
 
     All keys without `NotRequired` are always emitted by build_app_config()
     and required by the daemon's executeApp. The optional keys (kill_timeout,
-    kill_signal, watch) are emitted only when the caller passes them.
+    kill_signal, watch, ignore_watch, listen_timeout) are emitted only when
+    the caller passes them.
     """
 
     name: str
@@ -90,6 +99,11 @@ class AppConfig(TypedDict):
     instances: int
     merge_logs: bool
     vizion: bool
+    namespace: str
+    treekill: bool
+    autostart: bool
+    instance_var: str
+    wait_ready: bool
     pm_out_log_path: str
     pm_err_log_path: str
     pm_log_path: str
@@ -97,6 +111,8 @@ class AppConfig(TypedDict):
     kill_timeout: NotRequired[int]
     kill_signal: NotRequired[str]
     watch: NotRequired[bool | list[str]]
+    ignore_watch: NotRequired[list[str] | str]
+    listen_timeout: NotRequired[int]
 
 
 class EcosystemApp(TypedDict, total=False):
@@ -120,3 +136,8 @@ class EcosystemApp(TypedDict, total=False):
     kill_timeout: int
     kill_signal: str
     watch: bool | list[str]
+    ignore_watch: list[str] | str
+    namespace: str
+    wait_ready: bool
+    listen_timeout: int
+    filter_env: FilterEnv
