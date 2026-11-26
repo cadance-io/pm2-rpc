@@ -58,7 +58,8 @@ def describe(target: str | int) -> PM2Process:
     return found
 
 
-# pm2 7.0.4 lib/constants.js lines 83 and 103. A daemon started with
+# pm2 7.0.4 lib/constants.js: KILL_TIMEOUT is line 103, GRACEFUL_LISTEN_TIMEOUT
+# line 83. A daemon started with
 # PM2_KILL_TIMEOUT or PM2_GRACEFUL_LISTEN_TIMEOUT uses its own value, which a
 # client cannot read; pass `timeout` for such a daemon.
 _PM2_KILL_TIMEOUT_MS = 1600
@@ -71,9 +72,9 @@ _REPLY_MARGIN_S = 10.0
 def _stop_wait(p: PM2Process) -> float:
     """Seconds the daemon can hold a stop reply for `p`.
 
-    lib/God/Methods.js processIsDead (lines 154-208) waits `kill_timeout` for
+    lib/God/Methods.js processIsDead (lines 154-209) waits `kill_timeout` for
     the app to exit, sends SIGKILL, then waits `kill_timeout` again before it
-    gives up. stopProcessId (lib/God/ActionMethods.js lines 284-344) replies
+    gives up. stopProcessId (lib/God/ActionMethods.js lines 284-339) replies
     only after that.
     """
     kill_timeout_ms = p["pm2_env"].get("kill_timeout") or _PM2_KILL_TIMEOUT_MS
@@ -115,10 +116,10 @@ def restart(
     p = describe(target)
     pm_id = _pm_id(p)
     opts: dict[str, Any] = {"id": pm_id}
-    # PM2's God.restartProcessId does `Common.extend(proc.pm2_env, opts.env)`
-    # — it merges every key in `env` onto pm2_env, not just env-var names. We
-    # ride that path to update `kill_timeout` live; a top-level opts key is
-    # silently ignored by the daemon.
+    # God.restartProcessId does `Utility.extend(proc.pm2_env.env, env)`, and
+    # executeApp (lib/God.js line 178) copies every key of pm2_env.env onto
+    # pm2_env at the start that follows the stop. We ride that path to update
+    # `kill_timeout`; a top-level opts key is silently ignored by the daemon.
     merged_env: dict[str, Any] = dict(env) if env else {}
     if kill_timeout is not None:
         merged_env["kill_timeout"] = kill_timeout
