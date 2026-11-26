@@ -57,7 +57,9 @@ def _resolve_script(script: str | Path, cwd: Path) -> Path:
     found = shutil.which(str(script))
     if found is None:
         raise FileNotFoundError(f"script not found in {cwd} or on $PATH: {script}")
-    return Path(found).resolve()
+    # abspath, not resolve: a symlink such as a multicall coreutils binary
+    # must keep its own name, as pm2's which.js path.resolve keeps it.
+    return Path(os.path.abspath(found))
 
 
 def _resolve_interpreter(ext: str, explicit: str | None) -> str:
