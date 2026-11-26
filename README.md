@@ -81,9 +81,9 @@ pm2.delete("worker")  # removes it entirely
 | `start(script, **opts) -> dict` | Launch (fork mode); see kwargs below |
 | `start_ecosystem(config, *, only=, cwd=) -> list[dict]` | `.json`/`.yaml`; `.js` or an unknown app key raises `UnsupportedConfigError` |
 | `launch_daemon(pm2_root, *, node="node", timeout=10.0) -> None` | Start the daemon under `PM2_HOME` unless one answers ping |
-| `restart(target, *, env=None) -> dict` | `env` merges server-side via Object.assign |
-| `stop(target) -> dict` | Graceful stop, keeps entry |
-| `delete(target) -> None` | Unregister |
+| `restart(target, *, env=None, kill_timeout=None, timeout=None) -> dict` | `env` merges server-side via Object.assign |
+| `stop(target, *, timeout=None) -> dict` | Graceful stop, keeps entry |
+| `delete(target, *, timeout=None) -> None` | Stop and unregister |
 | `env(target) -> dict[str, str]` | The runtime env the process sees |
 | `logs(target, lines=15) -> str` | Last N lines of stdout |
 | `error_logs(target, lines=15) -> str` | Last N lines of stderr |
@@ -100,6 +100,12 @@ Each app gets the defaults the pm2 CLI sets and the daemon reads:
 `merge_logs: true`, `autostart: true`, `instance_var: NODE_APP_INSTANCE`,
 and `PWD=cwd` in the app env. `pm2_rpc.restart()` additionally
 accepts `kill_timeout` to bump the graceful-shutdown window for the next stop.
+
+`stop`, `delete` and `restart` wait for the daemon's reply as long as the
+daemon can take: twice the app's `kill_timeout` (pm2 default 1600 ms), plus
+`listen_timeout` for a `wait_ready` restart, plus 10 s. Pass `timeout`
+(seconds) to bound it yourself, for example against a daemon started with
+`PM2_KILL_TIMEOUT`. Past it, `TimeoutError` raises.
 
 Low-level access if you need it:
 
