@@ -58,19 +58,62 @@ def describe(target: str | int) -> PM2Process:
     return found
 
 
+# pm2 7.0.4 lib/constants.js lines 83 and 103. A daemon started with
+# PM2_KILL_TIMEOUT or PM2_GRACEFUL_LISTEN_TIMEOUT uses its own value, which a
+# client cannot read; pass `timeout` for such a daemon.
+_PM2_KILL_TIMEOUT_MS = 1600
+_PM2_LISTEN_TIMEOUT_MS = 3000
+# The fixed RPC timeout before 0.3.1. It covers the socket round trip and the
+# 250 ms retries of stopProcessId while an app is not online yet.
+_REPLY_MARGIN_S = 10.0
+
+
+def _stop_wait(p: PM2Process) -> float:
+    """Seconds the daemon can hold a stop reply for `p`.
+
+    lib/God/Methods.js processIsDead (lines 154-208) waits `kill_timeout` for
+    the app to exit, sends SIGKILL, then waits `kill_timeout` again before it
+    gives up. stopProcessId (lib/God/ActionMethods.js lines 284-344) replies
+    only after that.
+    """
+    kill_timeout_ms = p["pm2_env"].get("kill_timeout") or _PM2_KILL_TIMEOUT_MS
+    return 2 * kill_timeout_ms / 1000 + _REPLY_MARGIN_S
+
+
+def _restart_wait(p: PM2Process) -> float:
+    """Seconds the daemon can hold a restart reply for `p`.
+
+    restartProcessId (lib/God/ActionMethods.js lines 387-425) stops the app,
+    then starts it. With `wait_ready`, executeApp (lib/God.js lines 384-391)
+    replies after the app sends `ready`, or after `listen_timeout`.
+    """
+    env = p["pm2_env"]
+    if not env.get("wait_ready"):
+        return _stop_wait(p)
+    listen_timeout_ms = env.get("listen_timeout") or _PM2_LISTEN_TIMEOUT_MS
+    return _stop_wait(p) + listen_timeout_ms / 1000
+
+
 def restart(
     target: str | int,
     *,
     env: dict[str, str] | None = None,
     kill_timeout: int | None = None,
+    timeout: float | None = None,
 ) -> PM2Process:
     """Restart a process. `env` is merged via `Object.assign` server-side, so
     only the keys you pass are touched — to bring in your shell env, do
     `restart(name, env={**os.environ, ...})`.
 
     `kill_timeout` (ms) overrides `pm2_env.kill_timeout` for the next stop +
-    every subsequent stop until changed again."""
-    pm_id = _pm_id(describe(target))
+    every subsequent stop until changed again.
+
+    `timeout` (s) bounds the wait for the daemon's reply, and TimeoutError
+    raises past it. The default covers the daemon's own wait: twice the app's
+    current `kill_timeout`, plus `listen_timeout` with `wait_ready`, plus 10s.
+    """
+    p = describe(target)
+    pm_id = _pm_id(p)
     opts: dict[str, Any] = {"id": pm_id}
     # PM2's God.restartProcessId does `Common.extend(proc.pm2_env, opts.env)`
     # — it merges every key in `env` onto pm2_env, not just env-var names. We
@@ -81,19 +124,30 @@ def restart(
         merged_env["kill_timeout"] = kill_timeout
     if merged_env:
         opts["env"] = merged_env
-    axon.rpc_call("restartProcessId", opts)
+    wait = _restart_wait(p) if timeout is None else timeout
+    axon.rpc_call("restartProcessId", opts, timeout=wait)
     return describe(pm_id)
 
 
-def stop(target: str | int) -> PM2Process:
-    """Gracefully stop. Keeps the entry registered (status='stopped')."""
-    pm_id = _pm_id(describe(target))
-    axon.rpc_call("stopProcessId", pm_id)
+def stop(target: str | int, *, timeout: float | None = None) -> PM2Process:
+    """Gracefully stop. Keeps the entry registered (status='stopped').
+
+    `timeout` (s) bounds the wait for the daemon's reply, and TimeoutError
+    raises past it. The default covers the daemon's own wait: twice the app's
+    `kill_timeout` (pm2 default 1600 ms), plus 10s.
+    """
+    p = describe(target)
+    pm_id = _pm_id(p)
+    wait = _stop_wait(p) if timeout is None else timeout
+    axon.rpc_call("stopProcessId", pm_id, timeout=wait)
     return describe(pm_id)
 
 
-def delete(target: str | int) -> None:
-    axon.rpc_call("deleteProcessId", _pm_id(describe(target)))
+def delete(target: str | int, *, timeout: float | None = None) -> None:
+    """Stop the process and unregister it. `timeout` works as in `stop`."""
+    p = describe(target)
+    wait = _stop_wait(p) if timeout is None else timeout
+    axon.rpc_call("deleteProcessId", _pm_id(p), timeout=wait)
 
 
 def env(target: str | int) -> dict[str, str]:
