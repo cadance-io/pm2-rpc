@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import builtins
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
 from . import _app_config, axon
-from ._types import EcosystemApp, PM2Process
+from ._types import EcosystemApp, FilterEnv, PM2Process
 
 
 class NotFound(LookupError):
@@ -139,10 +141,15 @@ def start(
     autorestart: bool = True,
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
-    merge_logs: bool = False,
+    merge_logs: bool = True,
     kill_timeout: int | None = None,
     kill_signal: str | None = None,
     watch: bool | builtins.list[str] | None = None,
+    ignore_watch: builtins.list[str] | str | None = None,
+    namespace: str = "default",
+    wait_ready: bool = False,
+    listen_timeout: int | None = None,
+    filter_env: FilterEnv = False,
 ) -> PM2Process:
     """Launch a new process via the daemon's `prepare` RPC.
 
@@ -155,7 +162,13 @@ def start(
     server whose multiprocessing-spawn worker needs several seconds).
     `kill_signal` swaps the stop signal (e.g., "SIGINT" for jupyter/ipython
     which trap SIGINT). `watch=True` or a list of paths delegates file-watch
-    + restart to PM2 instead of embedding it in the app.
+    + restart to PM2 instead of embedding it in the app; `ignore_watch`
+    excludes paths from it. `wait_ready=True` keeps the process `launching`
+    until it sends `ready` over IPC, or until `listen_timeout` (ms) passes.
+
+    `filter_env` drops shell vars before `env` merges on top: `True` drops
+    them all, a str drops one by exact name, a list drops each var whose name
+    contains an item.
     """
     cfg = _app_config.build_app_config(
         script=script,
@@ -171,6 +184,11 @@ def start(
         kill_timeout=kill_timeout,
         kill_signal=kill_signal,
         watch=watch,
+        ignore_watch=ignore_watch,
+        namespace=namespace,
+        wait_ready=wait_ready,
+        listen_timeout=listen_timeout,
+        filter_env=filter_env,
     )
     axon.rpc_call("prepare", cfg)
     return _wait_until_registered(cfg["name"])
@@ -179,7 +197,8 @@ def start(
 _JS_CONFIG_SUFFIXES = (".js", ".cjs", ".mjs")
 
 # Ecosystem fields we accept verbatim from the config file. Names match PM2's
-# own vocabulary so users don't have to learn a parallel one.
+# own vocabulary so users don't have to learn a parallel one. Any other key
+# raises, so a field this library does not send never vanishes silently.
 _ECOSYSTEM_FIELDS = frozenset(
     {
         "name",
@@ -194,8 +213,14 @@ _ECOSYSTEM_FIELDS = frozenset(
         "kill_timeout",
         "kill_signal",
         "watch",
+        "ignore_watch",
+        "namespace",
+        "wait_ready",
+        "listen_timeout",
+        "filter_env",
     }
 )
+_ECOSYSTEM_KEYS = _ECOSYSTEM_FIELDS | {"script", "exec_interpreter"}
 
 
 def _load_ecosystem(path: Path) -> builtins.list[EcosystemApp]:
@@ -231,10 +256,15 @@ def _load_ecosystem(path: Path) -> builtins.list[EcosystemApp]:
 
 
 def _ecosystem_app_to_kwargs(app: EcosystemApp, base_cwd: Path) -> dict[str, Any]:
-    """Filter an ecosystem app entry to the kwargs `start()` accepts."""
+    """Map an ecosystem app entry to the kwargs `start()` accepts."""
     # Cast to plain dict for dynamic indexing — TypedDict requires literal
     # string keys, which doesn't compose with our field-set iteration.
     raw: dict[str, Any] = dict(app)
+    unknown = sorted(raw.keys() - _ECOSYSTEM_KEYS)
+    if unknown:
+        raise UnsupportedConfigError(
+            f"app {raw.get('name', raw.get('script'))!r}: unsupported ecosystem keys {unknown}"
+        )
     kwargs: dict[str, Any] = {k: raw[k] for k in _ECOSYSTEM_FIELDS if k in raw}
     # PM2's internal name for `interpreter` is `exec_interpreter`; some older
     # ecosystem files use that. Honor it without inventing a Python alias.
@@ -270,3 +300,68 @@ def start_ecosystem(
             raise UnsupportedConfigError(f"app entry missing required `script`: {app!r}")
         started.append(start(app["script"], **_ecosystem_app_to_kwargs(app, base_cwd)))
     return started
+
+
+def launch_daemon(pm2_root: Path, *, node: str = "node", timeout: float = 10.0) -> None:
+    """Start the pm2 God daemon under `PM2_HOME` unless one already answers ping.
+
+    Port of lib/Client.js `launchDaemon` (lines 209-253) and
+    `initFileStructure` (lines 130-160). `pm2_root` is the pm2 package dir,
+    the one that holds `lib/Daemon.js` and `bin/pm2`. The daemon runs detached
+    with its output in `PM2_HOME/pm2.log`. Env `_` names `bin/pm2`, because the
+    daemon's crash recovery runs `node $_ update` (lib/Daemon.js line 50).
+
+    Raises FileNotFoundError when `node` or `lib/Daemon.js` is missing, and
+    TimeoutError when the daemon exits or does not answer ping in `timeout`s.
+    """
+    if _answers_ping():
+        return
+    daemon_js = pm2_root / "lib" / "Daemon.js"
+    if not daemon_js.is_file():
+        raise FileNotFoundError(f"pm2 daemon entrypoint not found: {daemon_js}")
+    node_bin = shutil.which(node)
+    if node_bin is None:
+        raise FileNotFoundError(f"node binary not found on $PATH: {node}")
+
+    home = axon.PM2_HOME
+    for sub in ("logs", "pids", "modules"):
+        (home / sub).mkdir(parents=True, exist_ok=True)
+    module_conf = home / "module_conf.json"
+    if not module_conf.exists():
+        module_conf.write_text("{}")
+
+    log_path = home / "pm2.log"
+    with open(log_path, "a") as log:
+        proc = subprocess.Popen(
+            [node_bin, str(daemon_js)],
+            env={
+                "SILENT": "true",
+                **os.environ,
+                "PM2_HOME": str(home),
+                "_": str(pm2_root / "bin" / "pm2"),
+            },
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _answers_ping():
+            return
+        if proc.poll() is not None:
+            raise TimeoutError(
+                f"pm2 daemon exited with code {proc.returncode} before it answered ping; "
+                f"see {log_path}"
+            )
+        time.sleep(0.1)
+    raise TimeoutError(f"pm2 daemon did not answer ping within {timeout}s; see {log_path}")
+
+
+def _answers_ping() -> bool:
+    try:
+        axon.rpc_call("ping", timeout=1.0)
+    except OSError:
+        return False
+    return True

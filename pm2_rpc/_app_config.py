@@ -3,7 +3,7 @@
 This is the Python equivalent of the MVP-relevant 60% of PM2's
 `Common.prepareAppConf` (node_modules/pm2/lib/Common.js). It is intentionally
 minimal: fork-mode only, extension-based interpreter resolution, defaults for
-log/pid paths. No cluster mode, no NVM pinning, no filter_env edge cases.
+log/pid paths. No cluster mode, no NVM pinning.
 """
 
 from __future__ import annotations
@@ -11,17 +11,17 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
-from ._types import AppConfig
+from ._types import AppConfig, FilterEnv
+from .axon import PM2_HOME
 
-# PM2 stores all per-process files under ~/.pm2/ — log/pid templates here mirror
-# what `Common.sink` does in lib/Common.js so the daemon's executeApp finds
-# everything where it expects to.
-_PM2_HOME = Path.home() / ".pm2"
-_LOG_DIR = _PM2_HOME / "logs"
-_PID_DIR = _PM2_HOME / "pids"
+# Log/pid templates mirror pm2's paths.js DEFAULT_LOG_PATH / DEFAULT_PID_PATH
+# so the daemon's executeApp finds everything where it expects to.
+_LOG_DIR = PM2_HOME / "logs"
+_PID_DIR = PM2_HOME / "pids"
 
 # Static extension → interpreter table. PM2's lib/interpreter.json is the
 # authoritative version; this covers the common cases and skips NVM pinning.
@@ -48,18 +48,16 @@ def _sanitize_name(name: str) -> str:
 
 
 def _resolve_script(script: str | Path, cwd: Path) -> Path:
-    """Resolve `script` to an absolute path relative to `cwd`.
-
-    Intentionally does NOT fall back to $PATH (unlike lib/Common.js lines
-    148-163) — silently turning `pm2.start("python3")` into a thrashing
-    interpreter process is a worse UX than a clean FileNotFoundError. Pass
-    `shutil.which(...)`'s result if you actually want a PATH binary.
-    """
+    """Resolve `script` relative to `cwd`, then on $PATH, as lib/Common.js
+    lines 131-146 do (`pm2 start npm` runs the `npm` found on $PATH)."""
     p = Path(script)
     candidate = p if p.is_absolute() else cwd / p
-    if not candidate.is_file():
-        raise FileNotFoundError(f"script not found: {script}")
-    return candidate.resolve()
+    if candidate.is_file():
+        return candidate.resolve()
+    found = shutil.which(str(script))
+    if found is None:
+        raise FileNotFoundError(f"script not found in {cwd} or on $PATH: {script}")
+    return Path(found)
 
 
 def _resolve_interpreter(ext: str, explicit: str | None) -> str:
@@ -90,14 +88,38 @@ def _default_paths(name: str) -> dict[str, str]:
     }
 
 
-def _merge_env(extra: dict[str, str] | None, *, interpreter: str) -> dict[str, str]:
-    """Merge `extra` over `os.environ`; auto-set PYTHONUNBUFFERED for Python.
+def _filter_env(shell: dict[str, str], filter_env: FilterEnv) -> dict[str, str]:
+    """Port of `filterEnv` in lib/Common.js lines 165-179.
+
+    `True` drops the whole shell env. A `str` drops the one var of that exact
+    name. A `list` drops every var whose name contains one of its items.
+    """
+    if filter_env is True:
+        return {}
+    if filter_env is False:
+        return shell
+    if isinstance(filter_env, str):
+        return {k: v for k, v in shell.items() if k != filter_env}
+    return {k: v for k, v in shell.items() if not any(item in k for item in filter_env)}
+
+
+def _merge_env(
+    extra: dict[str, str] | None,
+    *,
+    interpreter: str,
+    cwd: Path,
+    filter_env: FilterEnv = False,
+) -> dict[str, str]:
+    """Build the app env the way lib/Common.js prepareAppConf does.
+
+    The shell env gets `PWD=cwd` (line 116), then `filter_env` (lines 165-185),
+    then PYTHONUNBUFFERED for a Python interpreter, then `extra` on top.
 
     The PYTHONUNBUFFERED behavior mirrors lib/Common.js line 474 — without it,
     `print()` output won't reach the PM2 log file until the buffer flushes,
     which can be many seconds for sleepy processes.
     """
-    merged: dict[str, str] = dict(os.environ)
+    merged = _filter_env({**os.environ, "PWD": str(cwd)}, filter_env)
     if "python" in os.path.basename(interpreter).lower():
         merged["PYTHONUNBUFFERED"] = "1"
     if extra:
@@ -116,15 +138,34 @@ def build_app_config(
     autorestart: bool = True,
     out_file: str | Path | None = None,
     error_file: str | Path | None = None,
-    merge_logs: bool = False,
+    merge_logs: bool = True,
     kill_timeout: int | None = None,
     kill_signal: str | None = None,
     watch: bool | list[str] | None = None,
+    ignore_watch: list[str] | str | None = None,
+    namespace: str = "default",
+    wait_ready: bool = False,
+    listen_timeout: int | None = None,
+    filter_env: FilterEnv = False,
 ) -> AppConfig:
     """Build the env dict to pass to `axon.rpc_call("prepare", env_dict)`.
 
     Output shape matches what PM2's `God.prepare` reads (see lib/God.js lines
     109-227, lib/God/ForkMode.js lines 36-86).
+
+    The pm2 CLI fills these app defaults before it calls `prepare`. The
+    daemon reads them, so this function sets them too:
+
+    - `treekill: True` (schema.json line 329). lib/God/Methods.js line 240
+      kills the whole process tree only when `treekill === true`; without
+      it, a grandchild survives `delete`.
+    - `autostart: True` (schema.json line 192). lib/God.js line 180 sets
+      the first status from it.
+    - `instance_var: "NODE_APP_INSTANCE"` (schema.json line 311). lib/God.js
+      line 604 names the instance env var with it.
+    - `merge_logs: True` (lib/Common.js lines 865-868, fork mode). When it is
+      false, lib/God.js line 208 appends `-<pm_id>` to each log path.
+    - `PWD=cwd` in the app env (lib/Common.js line 116).
     """
     cwd_path = Path(cwd).resolve() if cwd is not None else Path.cwd()
     script_path = _resolve_script(script, cwd_path)
@@ -156,7 +197,12 @@ def build_app_config(
         "pm_cwd": str(cwd_path),
         "exec_interpreter": interp,
         "exec_mode": "fork_mode",
-        "env": _merge_env(env, interpreter=interp),
+        "env": _merge_env(env, interpreter=interp, cwd=cwd_path, filter_env=filter_env),
+        "namespace": namespace,
+        "treekill": True,
+        "autostart": True,
+        "instance_var": "NODE_APP_INSTANCE",
+        "wait_ready": wait_ready,
         "args": arg_list,
         "node_args": [],
         "autorestart": autorestart,
@@ -174,4 +220,8 @@ def build_app_config(
         cfg["kill_signal"] = kill_signal
     if watch is not None:
         cfg["watch"] = watch
+    if ignore_watch is not None:
+        cfg["ignore_watch"] = ignore_watch
+    if listen_timeout is not None:
+        cfg["listen_timeout"] = listen_timeout
     return cfg

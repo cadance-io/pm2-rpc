@@ -126,3 +126,38 @@ def test_ecosystem_passes_lifecycle_keys(two_app_names: tuple[str, str], tmp_pat
     assert env["kill_timeout"] == 7777
     assert env["kill_signal"] == "SIGINT"
     assert env["watch"] == ["src"]
+
+
+def test_ecosystem_passes_daemon_fields(two_app_names: tuple[str, str], tmp_path: Path) -> None:
+    name_a, name_b = two_app_names
+    payload = _two_app_payload(name_a, name_b)
+    payload["apps"][0].update(
+        {
+            "namespace": "pm2rpc-ns",
+            "watch": ["src"],
+            "ignore_watch": ["node_modules"],
+            "wait_ready": True,
+            "listen_timeout": 500,
+            "filter_env": True,
+            "env": {"ONLY": "app"},
+        }
+    )
+    config = _write_json(tmp_path, payload)
+
+    pm2.start_ecosystem(config, only=name_a, cwd=tmp_path)
+
+    env = pm2.describe(name_a)["pm2_env"]
+    assert env["namespace"] == "pm2rpc-ns"
+    assert env["ignore_watch"] == ["node_modules"]
+    assert env["wait_ready"] is True
+    assert env["listen_timeout"] == 500
+    assert "HOME" not in env["env"]
+    assert env["env"]["ONLY"] == "app"
+
+
+def test_ecosystem_unknown_key_raises_naming_it(tmp_path: Path) -> None:
+    payload = _two_app_payload("a", "b")
+    payload["apps"][0]["max_memory_restart"] = "200M"
+    config = _write_json(tmp_path, payload)
+    with pytest.raises(ValueError, match="max_memory_restart"):
+        pm2.start_ecosystem(config, only="a")

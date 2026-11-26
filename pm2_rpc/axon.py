@@ -30,7 +30,9 @@ import struct
 from pathlib import Path
 from typing import Any
 
-SOCK_PATH = Path.home() / ".pm2" / "rpc.sock"
+# Resolved once at import, as pm2's own paths.js does at require time.
+PM2_HOME = Path(os.environ.get("PM2_HOME") or Path.home() / ".pm2")
+SOCK_PATH = PM2_HOME / "rpc.sock"
 AMP_VERSION = 1
 
 
@@ -90,9 +92,14 @@ def _read_amp(sock: socket.socket) -> list[Any]:
 
 
 def rpc_call(method: str, *args: Any, timeout: float = 10.0) -> Any:
-    """Make one axon-rpc call against PM2's daemon and return its result list."""
+    """Make one axon-rpc call against PM2's daemon and return its result list.
+
+    A call with no argument sends `{}`: the daemon appends its callback after
+    the args, so a bare call hands the callback slot to the first parameter
+    and the daemon crashes with `cb is not a function`.
+    """
     req_id = f"{os.getpid()}:0"
-    body = {"type": "call", "method": method, "args": list(args)}
+    body = {"type": "call", "method": method, "args": list(args) or [{}]}
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
         s.settimeout(timeout)
         s.connect(str(SOCK_PATH))

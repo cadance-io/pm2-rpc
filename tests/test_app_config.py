@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import get_type_hints
 
 import pytest
 
+from pm2_rpc import PM2_HOME
 from pm2_rpc import _app_config as ac
 from pm2_rpc._types import AppConfig, PM2Env
 
@@ -38,14 +40,14 @@ def test_resolve_script_relative_to_cwd(tmp_path: Path) -> None:
     assert ac._resolve_script("x.py", tmp_path) == f
 
 
-def test_resolve_script_does_not_fall_back_to_path(tmp_path: Path) -> None:
-    """`python3` is on $PATH but we deliberately do not resolve it.
+def test_resolve_script_falls_back_to_path_like_common_js_131(tmp_path: Path) -> None:
+    assert ac._resolve_script("sleep", tmp_path) == Path(shutil.which("sleep") or "")
 
-    Otherwise `pm2.start('python3')` would happily start a bare interpreter
-    that PM2 then thrashes restarting.
-    """
-    with pytest.raises(FileNotFoundError):
-        ac._resolve_script("python3", tmp_path)
+
+def test_resolve_script_prefers_cwd_file_over_path(tmp_path: Path) -> None:
+    f = tmp_path / "sleep"
+    f.write_text("")
+    assert ac._resolve_script("sleep", tmp_path) == f
 
 
 def test_resolve_script_missing_raises(tmp_path: Path) -> None:
@@ -82,9 +84,9 @@ def test_resolve_interpreter_explicit_wins_over_extension() -> None:
 # _default_paths --------------------------------------------------------------
 
 
-def test_default_paths_under_pm2_dir() -> None:
+def test_default_paths_under_pm2_home() -> None:
     paths = ac._default_paths("myapp")
-    home_pm2 = str(Path.home() / ".pm2")
+    home_pm2 = str(PM2_HOME)
     assert paths["pm_out_log_path"].startswith(home_pm2)
     assert paths["pm_err_log_path"].startswith(home_pm2)
     assert paths["pm_pid_path"].startswith(home_pm2)
@@ -98,24 +100,24 @@ def test_default_paths_under_pm2_dir() -> None:
 
 
 def test_merge_env_starts_from_os_environ() -> None:
-    merged = ac._merge_env({}, interpreter="/bin/true")
+    merged = ac._merge_env({}, interpreter="/bin/true", cwd=Path("/"))
     assert merged.get("PATH") == os.environ.get("PATH")
 
 
 def test_merge_env_extra_overrides_os_environ(monkeypatch) -> None:
     monkeypatch.setenv("FOO_BAR", "baseline")
-    merged = ac._merge_env({"FOO_BAR": "override"}, interpreter="/bin/true")
+    merged = ac._merge_env({"FOO_BAR": "override"}, interpreter="/bin/true", cwd=Path("/"))
     assert merged["FOO_BAR"] == "override"
 
 
 def test_merge_env_python_sets_pythonunbuffered() -> None:
-    merged = ac._merge_env({}, interpreter=sys.executable)
+    merged = ac._merge_env({}, interpreter=sys.executable, cwd=Path("/"))
     assert merged["PYTHONUNBUFFERED"] == "1"
 
 
 def test_merge_env_non_python_does_not_set_pythonunbuffered(monkeypatch) -> None:
     monkeypatch.delenv("PYTHONUNBUFFERED", raising=False)
-    merged = ac._merge_env({}, interpreter="node")
+    merged = ac._merge_env({}, interpreter="node", cwd=Path("/"))
     assert "PYTHONUNBUFFERED" not in merged
 
 
@@ -138,7 +140,7 @@ def test_build_app_config_minimum_inputs(tmp_path: Path) -> None:
     assert cfg["instances"] == 1
     assert cfg["args"] == []
     assert cfg["node_args"] == []
-    assert cfg["merge_logs"] is False
+    assert cfg["merge_logs"] is True
     assert isinstance(cfg["env"], dict)
     assert cfg["env"]["PYTHONUNBUFFERED"] == "1"
 
@@ -227,3 +229,97 @@ def test_build_app_config_emits_watch_paths(tmp_path: Path) -> None:
     script.write_text("")
     cfg = ac.build_app_config(script=str(script), cwd=tmp_path, watch=["src", "config.yaml"])
     assert cfg["watch"] == ["src", "config.yaml"]
+
+
+# _merge_env — PWD and filter_env (lib/Common.js lines 116, 165-185) ---------
+
+
+def test_merge_env_sets_pwd_to_cwd(tmp_path: Path) -> None:
+    assert ac._merge_env({}, interpreter="node", cwd=tmp_path)["PWD"] == str(tmp_path)
+
+
+def test_merge_env_filter_env_true_drops_whole_shell_env(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHELL_ONLY", "x")
+    merged = ac._merge_env({"APP": "1"}, interpreter="node", cwd=tmp_path, filter_env=True)
+    assert merged == {"APP": "1"}
+
+
+def test_merge_env_filter_env_str_drops_exact_name_only(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DATABASE_URL", "shell")
+    monkeypatch.setenv("DATABASE_URL_RO", "shell")
+    merged = ac._merge_env({}, interpreter="node", cwd=tmp_path, filter_env="DATABASE_URL")
+    assert "DATABASE_URL" not in merged
+    assert merged["DATABASE_URL_RO"] == "shell"
+
+
+def test_merge_env_filter_env_list_drops_names_containing_an_item(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("LANE_DATABASE_URL", "shell")
+    monkeypatch.setenv("REDIS_URL", "shell")
+    monkeypatch.setenv("KEEP_ME", "shell")
+    merged = ac._merge_env({}, interpreter="node", cwd=tmp_path, filter_env=["DATABASE_", "REDIS"])
+    assert "LANE_DATABASE_URL" not in merged
+    assert "REDIS_URL" not in merged
+    assert merged["KEEP_ME"] == "shell"
+
+
+def test_merge_env_app_env_merges_over_filtered_shell(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DATABASE_URL", "shell")
+    merged = ac._merge_env(
+        {"DATABASE_URL": "app"}, interpreter="node", cwd=tmp_path, filter_env=["DATABASE_"]
+    )
+    assert merged["DATABASE_URL"] == "app"
+
+
+# build_app_config — pm2 CLI defaults the daemon reads --------------------------
+
+
+@pytest.fixture
+def cfg(tmp_path: Path) -> AppConfig:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    return ac.build_app_config(script=str(script), cwd=tmp_path)
+
+
+def test_default_treekill_true_schema_329_read_by_god_methods_240(cfg: AppConfig) -> None:
+    assert cfg["treekill"] is True
+
+
+def test_default_autostart_true_schema_192_read_by_god_180(cfg: AppConfig) -> None:
+    assert cfg["autostart"] is True
+
+
+def test_default_instance_var_schema_311_read_by_god_604(cfg: AppConfig) -> None:
+    assert cfg["instance_var"] == "NODE_APP_INSTANCE"
+
+
+def test_default_merge_logs_true_common_868_read_by_god_208(cfg: AppConfig) -> None:
+    assert cfg["merge_logs"] is True
+
+
+def test_default_namespace_and_wait_ready(cfg: AppConfig) -> None:
+    assert cfg["namespace"] == "default"
+    assert cfg["wait_ready"] is False
+
+
+def test_omits_ignore_watch_and_listen_timeout_by_default(cfg: AppConfig) -> None:
+    assert "ignore_watch" not in cfg
+    assert "listen_timeout" not in cfg
+
+
+def test_build_app_config_emits_daemon_pass_through_fields(tmp_path: Path) -> None:
+    script = tmp_path / "x.py"
+    script.write_text("")
+    cfg = ac.build_app_config(
+        script=str(script),
+        cwd=tmp_path,
+        namespace="lane9",
+        ignore_watch=["node_modules"],
+        wait_ready=True,
+        listen_timeout=8000,
+    )
+    assert cfg["namespace"] == "lane9"
+    assert cfg["ignore_watch"] == ["node_modules"]
+    assert cfg["wait_ready"] is True
+    assert cfg["listen_timeout"] == 8000
